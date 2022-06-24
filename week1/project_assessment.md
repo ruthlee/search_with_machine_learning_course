@@ -30,4 +30,4 @@ When you leak some of the testing data into the training data, causing your mode
 
 Search patterns can change over time. Past data may not be the best indicator of current search trends. 
 
-Best MRR score: 
+Best MRR score: 0.401
