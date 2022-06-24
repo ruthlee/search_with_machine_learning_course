@@ -12,6 +12,92 @@
             "name": "{{keywords}}"
           }
         }
+      },
+      {
+        "name": "short_description_phrase_match",
+        "params": [
+          "keywords"
+        ],
+        "template_language": "mustache",
+        "template": {
+          "match": {
+            "shortDescription.hyphens": "{{keywords}}"
+          }
+        }
+      },
+      {
+        "name": "long_description_phrase_match",
+        "params": [
+          "keywords"
+        ],
+        "template_language": "mustache",
+        "template": {
+          "match": {
+            "longDescription.hyphens": "{{keywords}}"
+          }
+        }
+      },
+      {
+        "name": "artist_name_phrase_match",
+        "params": [
+          "keywords"
+        ],
+        "template_language": "mustache",
+        "template": {
+          "match": {
+            "artistName.hyphens": "{{keywords}}"
+          }
+        }
+      },
+      {
+        "name": "name_phrase_match",
+        "params": [
+          "keywords"
+        ],
+        "template_language": "mustache",
+        "template": {
+          "match": {
+            "name.hyphens": "{{keywords}}"
+          }
+        }
+      },
+      {
+        "name": "customerReviewAverage",
+        "template_language": "mustache",
+        "template": {
+          "function_score": {
+            "functions": [
+              {
+                "field_value_factor": {
+                  "field": "customerReviewAverage",
+                  "missing": 3
+              }
+            }
+          ],
+            "query": {
+              "match_all": {}
+            }
+          }
+        }
+      },
+      {
+        "name": "customerReviewCount",
+        "template_language": "mustache",
+        "template": {
+          "function_score": {
+            "functions": [
+              {
+                "field_value_factor": {
+                  "field": "customerReviewCount",
+                  "missing": 100
+              }
+            }
+          ],
+            "query": {
+              "match_all": {}
+            }
+          }
+        }
       }
     ]
   }

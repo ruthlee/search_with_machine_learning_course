@@ -6,6 +6,7 @@ import pandas as pd
 import query_utils as qu
 from opensearchpy import RequestError
 import os
+from collections import defaultdict
 
 # from importlib import reload
 
@@ -232,29 +233,16 @@ class DataPrepper:
                                                 size=len(query_doc_ids), terms_field=terms_field)
         ##### Step Extract LTR Logged Features:
         response = self.opensearch.search(body=log_query, index=self.index_name)
-        # features = response['hits']['hits'][0]['fields']['_ltrlog'][0]['log_entry']
-        print("PRINTING:", response['hits']['hits'][0]['_id'])
-        # Loop over the hits structure returned by running `log_query` and then extract out the features from the response per query_id and doc id.  Also capture and return all query/doc pairs that didn't return features
-        # Your structure should look like the data frame below
-        feature_dict = {}
-        for doc in response['hits']['hits'][0]['_id']:
-            for feat in response['hits']['hits'][0]['fields']['_ltrlog'][0]['log_entry']:
-                feature_dict[feat['name']] = feat['name']
-
-        feature_results = {}
-        feature_results["doc_id"] = []  # capture the doc id so we can join later
-        feature_results["query_id"] = []  # ^^^
-        feature_results["sku"] = []
-        feature_results["name_match"] = []
-        rng = np.random.default_rng(12345)
-        for doc_id in query_doc_ids:
-            feature_results["doc_id"].append(doc_id)  # capture the doc id so we can join later
-            feature_results["query_id"].append(query_id)
-            feature_results["sku"].append(doc_id)  
-            feature_results["name_match"].append(rng.random())
-        frame = pd.DataFrame(feature_results)
-        return frame.astype({'doc_id': 'int64', 'query_id': 'int64', 'sku': 'int64'})
-        # IMPLEMENT_END
+        feature_results = defaultdict(list)
+        hit = response['hits']['hits'][0]
+        doc_id = hit["_id"]
+        for feat in hit['fields']['_ltrlog'][0]['log_entry']:
+            feature_results[feat['name']].append(feat.get('value', 0))
+        feature_results["doc_id"].append(doc_id)
+        feature_results["query_id"].append(query_id)
+        feature_results["sku"].append(doc_id)
+        # print(pd.DataFrame(feature_results)[['short_description_phrase_match', 'long_description_phrase_match', 'artist_name_phrase_match']])
+        return pd.DataFrame(feature_results).astype({'doc_id': 'int64', 'query_id': 'int64', 'sku': 'int64'})
 
     # Can try out normalizing data, but for XGb, you really don't have to since it is just finding splits
     def normalize_data(self, ranks_features_df, feature_set, normalize_type_map):
