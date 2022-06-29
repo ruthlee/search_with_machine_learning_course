@@ -49,124 +49,243 @@ def create_prior_queries(doc_ids, doc_id_weights,
 
 
 # Hardcoded query here.  Better to use search templates or other query config.
-def create_query(user_query, click_prior_query, filters, sort="_score", sortDir="desc", size=10, source=None):
-    query_obj = {
-        'size': size,
-        "sort": [
-            {sort: {"order": sortDir}}
-        ],
-        "query": {
-            "function_score": {
-                "query": {
-                    "bool": {
-                        "must": [
+def create_query(user_query, click_prior_query, filters, sort="_score", sortDir="desc", size=10, source=None, synonyms=0):
+    if synonyms==1:
+        query_obj = {
+            'size': size,
+            "sort": [
+                {sort: {"order": sortDir}}
+            ],
+            "query": {
+                "function_score": {
+                    "query": {
+                        "bool": {
+                            "must": [
 
-                        ],
-                        "should": [  #
-                            {
-                                "match": {
-                                    "name": {
+                            ],
+                            "should": [  #
+                                {
+                                    "match": {
+                                        "name.synonyms": {
+                                            "query": user_query,
+                                            "fuzziness": "1",
+                                            "prefix_length": 2,
+                                            # short words are often acronyms or usually not misspelled, so don't edit
+                                            "boost": 0.01
+                                        }
+                                    }
+                                },
+                                {
+                                    "match_phrase": {  # near exact phrase match
+                                        "name.hyphens": {
+                                            "query": user_query,
+                                            "slop": 1,
+                                            "boost": 50
+                                        }
+                                    }
+                                },
+                                {
+                                    "multi_match": {
                                         "query": user_query,
-                                        "fuzziness": "1",
-                                        "prefix_length": 2,
-                                        # short words are often acronyms or usually not misspelled, so don't edit
-                                        "boost": 0.01
+                                        "type": "phrase",
+                                        "slop": "6",
+                                        "minimum_should_match": "2<75%",
+                                        "fields": ["name^10", "name.hyphens^10", "shortDescription^5",
+                                                "longDescription^5", "department^0.5", "sku", "manufacturer", "features",
+                                                "categoryPath", "name_synonyms"]
+                                    }
+                                },
+                                {
+                                    "terms": {
+                                        # Lots of SKUs in the query logs, boost by it, split on whitespace so we get a list
+                                        "sku": user_query.split(),
+                                        "boost": 50.0
+                                    }
+                                },
+                                {  # lots of products have hyphens in them or other weird casing things like iPad
+                                    "match": {
+                                        "name.hyphens": {
+                                            "query": user_query,
+                                            "operator": "OR",
+                                            "minimum_should_match": "2<75%"
+                                        }
                                     }
                                 }
-                            },
-                            {
-                                "match_phrase": {  # near exact phrase match
-                                    "name.hyphens": {
-                                        "query": user_query,
-                                        "slop": 1,
-                                        "boost": 50
-                                    }
-                                }
-                            },
-                            {
-                                "multi_match": {
-                                    "query": user_query,
-                                    "type": "phrase",
-                                    "slop": "6",
-                                    "minimum_should_match": "2<75%",
-                                    "fields": ["name^10", "name.hyphens^10", "shortDescription^5",
-                                               "longDescription^5", "department^0.5", "sku", "manufacturer", "features",
-                                               "categoryPath", "name_synonyms"]
-                                }
-                            },
-                            {
-                                "terms": {
-                                    # Lots of SKUs in the query logs, boost by it, split on whitespace so we get a list
-                                    "sku": user_query.split(),
-                                    "boost": 50.0
-                                }
-                            },
-                            {  # lots of products have hyphens in them or other weird casing things like iPad
-                                "match": {
-                                    "name.hyphens": {
-                                        "query": user_query,
-                                        "operator": "OR",
-                                        "minimum_should_match": "2<75%"
-                                    }
-                                }
-                            }
-                        ],
-                        "minimum_should_match": 1,
-                        "filter": filters  #
-                    }
-                },
-                "boost_mode": "multiply",  # how _score and functions are combined
-                "score_mode": "sum",  # how functions are combined
-                "functions": [
-                    {
-                        "filter": {
-                            "exists": {
-                                "field": "salesRankShortTerm"
-                            }
-                        },
-                        "gauss": {
-                            "salesRankShortTerm": {
-                                "origin": "1.0",
-                                "scale": "100"
-                            }
+                            ],
+                            "minimum_should_match": 1,
+                            "filter": filters  #
                         }
                     },
-                    {
-                        "filter": {
-                            "exists": {
-                                "field": "salesRankMediumTerm"
+                    "boost_mode": "multiply",  # how _score and functions are combined
+                    "score_mode": "sum",  # how functions are combined
+                    "functions": [
+                        {
+                            "filter": {
+                                "exists": {
+                                    "field": "salesRankShortTerm"
+                                }
+                            },
+                            "gauss": {
+                                "salesRankShortTerm": {
+                                    "origin": "1.0",
+                                    "scale": "100"
+                                }
                             }
                         },
-                        "gauss": {
-                            "salesRankMediumTerm": {
-                                "origin": "1.0",
-                                "scale": "1000"
-                            }
-                        }
-                    },
-                    {
-                        "filter": {
-                            "exists": {
-                                "field": "salesRankLongTerm"
+                        {
+                            "filter": {
+                                "exists": {
+                                    "field": "salesRankMediumTerm"
+                                }
+                            },
+                            "gauss": {
+                                "salesRankMediumTerm": {
+                                    "origin": "1.0",
+                                    "scale": "1000"
+                                }
                             }
                         },
-                        "gauss": {
-                            "salesRankLongTerm": {
-                                "origin": "1.0",
-                                "scale": "1000"
+                        {
+                            "filter": {
+                                "exists": {
+                                    "field": "salesRankLongTerm"
+                                }
+                            },
+                            "gauss": {
+                                "salesRankLongTerm": {
+                                    "origin": "1.0",
+                                    "scale": "1000"
+                                }
+                            }
+                        },
+                        {
+                            "script_score": {
+                                "script": "0.0001"
                             }
                         }
-                    },
-                    {
-                        "script_score": {
-                            "script": "0.0001"
-                        }
-                    }
-                ]
+                    ]
 
+                }
             }
         }
-    }
+    else:
+        query_obj = {
+            'size': size,
+            "sort": [
+                {sort: {"order": sortDir}}
+            ],
+            "query": {
+                "function_score": {
+                    "query": {
+                        "bool": {
+                            "must": [
+
+                            ],
+                            "should": [  #
+                                {
+                                    "match": {
+                                        "name": {
+                                            "query": user_query,
+                                            "fuzziness": "1",
+                                            "prefix_length": 2,
+                                            # short words are often acronyms or usually not misspelled, so don't edit
+                                            "boost": 0.01
+                                        }
+                                    }
+                                },
+                                {
+                                    "match_phrase": {  # near exact phrase match
+                                        "name.hyphens": {
+                                            "query": user_query,
+                                            "slop": 1,
+                                            "boost": 50
+                                        }
+                                    }
+                                },
+                                {
+                                    "multi_match": {
+                                        "query": user_query,
+                                        "type": "phrase",
+                                        "slop": "6",
+                                        "minimum_should_match": "2<75%",
+                                        "fields": ["name^10", "name.hyphens^10", "shortDescription^5",
+                                                "longDescription^5", "department^0.5", "sku", "manufacturer", "features",
+                                                "categoryPath", "name_synonyms"]
+                                    }
+                                },
+                                {
+                                    "terms": {
+                                        # Lots of SKUs in the query logs, boost by it, split on whitespace so we get a list
+                                        "sku": user_query.split(),
+                                        "boost": 50.0
+                                    }
+                                },
+                                {  # lots of products have hyphens in them or other weird casing things like iPad
+                                    "match": {
+                                        "name.hyphens": {
+                                            "query": user_query,
+                                            "operator": "OR",
+                                            "minimum_should_match": "2<75%"
+                                        }
+                                    }
+                                }
+                            ],
+                            "minimum_should_match": 1,
+                            "filter": filters  #
+                        }
+                    },
+                    "boost_mode": "multiply",  # how _score and functions are combined
+                    "score_mode": "sum",  # how functions are combined
+                    "functions": [
+                        {
+                            "filter": {
+                                "exists": {
+                                    "field": "salesRankShortTerm"
+                                }
+                            },
+                            "gauss": {
+                                "salesRankShortTerm": {
+                                    "origin": "1.0",
+                                    "scale": "100"
+                                }
+                            }
+                        },
+                        {
+                            "filter": {
+                                "exists": {
+                                    "field": "salesRankMediumTerm"
+                                }
+                            },
+                            "gauss": {
+                                "salesRankMediumTerm": {
+                                    "origin": "1.0",
+                                    "scale": "1000"
+                                }
+                            }
+                        },
+                        {
+                            "filter": {
+                                "exists": {
+                                    "field": "salesRankLongTerm"
+                                }
+                            },
+                            "gauss": {
+                                "salesRankLongTerm": {
+                                    "origin": "1.0",
+                                    "scale": "1000"
+                                }
+                            }
+                        },
+                        {
+                            "script_score": {
+                                "script": "0.0001"
+                            }
+                        }
+                    ]
+
+                }
+            }
+        }
     if click_prior_query is not None and click_prior_query != "":
         query_obj["query"]["function_score"]["query"]["bool"]["should"].append({
             "query_string": {
@@ -208,7 +327,9 @@ if __name__ == "__main__":
     general.add_argument("-p", '--port', type=int, default=9200,
                          help='The OpenSearch port')
     general.add_argument('--user',
-                         help='The OpenSearch admin.  If this is set, the program will prompt for password too. If not set, use default of admin/admin')
+                         help='The OpenSearch admin  If this is set, the program will prompt for password too. If not set, use default of admin/admin')
+    general.add_argument('-sy', '--synonyms', type=int, default=0, 
+                         help='1 if you want to use synonyms for title')
 
     args = parser.parse_args()
 
