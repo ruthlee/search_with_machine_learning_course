@@ -43,19 +43,36 @@ for child in root:
         categories.append(leaf_id)
         parents.append(cat_path_ids[-2])
 parents_df = pd.DataFrame(list(zip(categories, parents)), columns =['category', 'parent'])
+parents_dict = dict(zip(categories, parents))
 
 # Read the training data into pandas, only keeping queries with non-root categories in our category tree.
 df = pd.read_csv(queries_file_name)[['category', 'query']]
 df = df[df['category'].isin(categories)]
 
 # IMPLEMENT ME: Convert queries to lowercase, and optionally implement other normalization, like stemming.
+df['query'] = df['query'].str.lower()
 
 # IMPLEMENT ME: Roll up categories to ancestors to satisfy the minimum number of queries per category.
+leaf_counts = df.groupby('category').count().reset_index().sort_values(by='query').reset_index(drop=True)
+print(leaf_counts)
+smallest_n_queries = leaf_counts.loc[0, 'query']
+while smallest_n_queries <= min_queries:
+    smallest_category = leaf_counts.loc[0, 'category']
+    smallest_n_queries = leaf_counts.loc[0, 'query']
+    print("smallest category: ", smallest_category)
+    print("smallest n queries: ", smallest_n_queries)
+    # rolled_up_dict[leaf_counts.loc[0, 'category']] = parents_dict[row['category']]
+    # df = df.where(df[df.category==smallest_category], parents_dict[leaf_counts.loc[0, 'category']])
+    df['category'].replace(smallest_category, parents_dict[smallest_category], inplace=True)
+    leaf_counts = df.groupby('category').count().reset_index().sort_values(by='query').reset_index(drop=True)
+    print(leaf_counts)
 
-# Create labels in fastText format.
+print("NUM CATEGORIES: ", len(set(df.category)))
+
+# # Create labels in fastText format.
 df['label'] = '__label__' + df['category']
 
-# Output labeled query data as a space-separated file, making sure that every category is in the taxonomy.
+# # Output labeled query data as a space-separated file, making sure that every category is in the taxonomy.
 df = df[df['category'].isin(categories)]
 df['output'] = df['label'] + ' ' + df['query']
 df[['output']].to_csv(output_file_name, header=False, sep='|', escapechar='\\', quoting=csv.QUOTE_NONE, index=False)
